@@ -1,0 +1,15 @@
+{
+  "domain": "sunhold",
+  "name": "Sunhold",
+  "after_dependencies": ["weather"],
+  "codeowners": ["@marl1w"],
+  "config_flow": true,
+  "dependencies": ["http", "panel_custom", "recorder", "websocket_api"],
+  "documentation": "https://github.com/marl1w/sunhold-ha",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/marl1w/sunhold-ha/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

@@ -1,0 +1,17 @@
+feedback:
+  fields:
+    signal:
+      required: true
+      selector:
+        select:
+          options:
+            - too_cold
+            - ok
+            - too_warm
+          translation_key: signal
+    zone:
+      selector:
+        text:
+    date:
+      selector:
+        date:

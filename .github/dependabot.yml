@@ -1,0 +1,14 @@
+# Actions only. reolink-aio is pinned to the version Home Assistant ships, and the other
+# test dependencies are unpinned, so a pip block would have nothing safe to raise.
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"

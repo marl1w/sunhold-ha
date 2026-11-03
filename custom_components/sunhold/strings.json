@@ -1,0 +1,205 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Your house",
+        "description": "What Sunhold reads to understand the weather and the house. Only the forecast and an outdoor temperature are required; each optional sensor unlocks more.",
+        "data": {
+          "weather": "Forecast",
+          "outdoor_temperature": "Outdoor temperature",
+          "sun_sensor": "Sun (irradiance, or solar panel power)",
+          "pv_power": "Solar panel power",
+          "house_power": "Whole-house power",
+          "heat_pump_power": "Heat pump power",
+          "notify_service": "Notify service",
+          "hold_until": "Winter sun hold ends at"
+        },
+        "data_description": {
+          "outdoor_temperature": "A shaded sensor. One warmed by the sun reads high and skews the model.",
+          "sun_sensor": "Measured sun. Lets Sunhold learn how far the forecast can be trusted, and check at 10:30 that the sun came.",
+          "pv_power": "With whole-house and heat pump power, enables the summer solar gate.",
+          "heat_pump_power": "Lets the winter model learn from mornings when the heating ran.",
+          "notify_service": "For example notify.mobile_app_phone. Summaries carry Too cold / Just right / Too warm buttons."
+        }
+      },
+      "reconfigure": {
+        "title": "Your house",
+        "data": {
+          "weather": "Forecast",
+          "outdoor_temperature": "Outdoor temperature",
+          "sun_sensor": "Sun (irradiance, or solar panel power)",
+          "pv_power": "Solar panel power",
+          "house_power": "Whole-house power",
+          "heat_pump_power": "Heat pump power",
+          "notify_service": "Notify service",
+          "hold_until": "Winter sun hold ends at"
+        },
+        "data_description": {
+          "outdoor_temperature": "A shaded sensor. One warmed by the sun reads high and skews the model.",
+          "sun_sensor": "Measured sun. Lets Sunhold learn how far the forecast can be trusted, and check at 10:30 that the sun came.",
+          "pv_power": "With whole-house and heat pump power, enables the summer solar gate.",
+          "heat_pump_power": "Lets the winter model learn from mornings when the heating ran.",
+          "notify_service": "For example notify.mobile_app_phone. Summaries carry Too cold / Just right / Too warm buttons."
+        }
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "Settings updated."
+    }
+  },
+  "config_subentries": {
+    "zone": {
+      "initiate_flow": {
+        "user": "Add zone"
+      },
+      "entry_type": "Zone",
+      "step": {
+        "user": {
+          "title": "Zone",
+          "description": "One thermostat zone. Sunhold only reads the thermostat; follow its entities to drive the device.",
+          "data": {
+            "name": "Name",
+            "climate": "Thermostat",
+            "temperature_sensor": "Indoor temperature",
+            "openings": "Doors and windows that pause it",
+            "winter_target": "Comfortable in winter",
+            "summer_target": "Comfortable in summer",
+            "sun_floor": "Sun hold floor",
+            "window_pause_heat": "Window pause, winter",
+            "summer_pause": "Pause limit, summer"
+          },
+          "data_description": {
+            "climate": "Read only: its heat/cool mode gives the season, and a person changing its set point is learned from.",
+            "temperature_sensor": "Needs long-term statistics (state class measurement).",
+            "openings": "Pause after 5 minutes open, resume 2 minutes after closing.",
+            "winter_target": "The temperature this zone should reach. Learned feedback adjusts it.",
+            "summer_target": "Above this by 1 °C, a solar pause ends.",
+            "sun_floor": "While holding for the sun, heat only below this.",
+            "window_pause_heat": "While a window is open, heat only below this.",
+            "summer_pause": "While paused in summer, cool only above this."
+          }
+        },
+        "reconfigure": {
+          "title": "Zone",
+          "data": {
+            "name": "Name",
+            "climate": "Thermostat",
+            "temperature_sensor": "Indoor temperature",
+            "openings": "Doors and windows that pause it",
+            "winter_target": "Comfortable in winter",
+            "summer_target": "Comfortable in summer",
+            "sun_floor": "Sun hold floor",
+            "window_pause_heat": "Window pause, winter",
+            "summer_pause": "Pause limit, summer"
+          },
+          "data_description": {
+            "climate": "Read only: its heat/cool mode gives the season, and a person changing its set point is learned from.",
+            "temperature_sensor": "Needs long-term statistics (state class measurement).",
+            "openings": "Pause after 5 minutes open, resume 2 minutes after closing.",
+            "winter_target": "The temperature this zone should reach. Learned feedback adjusts it.",
+            "summer_target": "Above this by 1 °C, a solar pause ends.",
+            "sun_floor": "While holding for the sun, heat only below this.",
+            "window_pause_heat": "While a window is open, heat only below this.",
+            "summer_pause": "While paused in summer, cool only above this."
+          }
+        }
+      },
+      "abort": {
+        "reconfigure_successful": "Zone updated."
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "solar_pause": {
+        "name": "Solar cooling pause"
+      }
+    },
+    "button": {
+      "feedback_too_cold": {
+        "name": "Too cold"
+      },
+      "feedback_ok": {
+        "name": "Just right"
+      },
+      "feedback_too_warm": {
+        "name": "Too warm"
+      }
+    },
+    "sensor": {
+      "recommendation": {
+        "name": "Recommendation",
+        "state": {
+          "schedule": "Schedule",
+          "sun_hold": "Sun hold",
+          "window_pause": "Window pause",
+          "solar_pause": "Solar pause",
+          "solar_boost": "Solar boost"
+        }
+      },
+      "setpoint": {
+        "name": "Set point"
+      },
+      "comfort_target": {
+        "name": "Comfort target"
+      },
+      "predicted_peak": {
+        "name": "Predicted peak"
+      },
+      "solar_headroom": {
+        "name": "Solar headroom"
+      }
+    },
+    "switch": {
+      "sun_hold": {
+        "name": "Sun hold"
+      },
+      "solar_cooling": {
+        "name": "Solar cooling"
+      },
+      "solar_boost": {
+        "name": "Solar boost"
+      },
+      "window_pause": {
+        "name": "Window pause"
+      }
+    }
+  },
+  "selector": {
+    "signal": {
+      "options": {
+        "too_cold": "Too cold",
+        "ok": "Just right",
+        "too_warm": "Too warm"
+      }
+    }
+  },
+  "services": {
+    "feedback": {
+      "name": "Feedback",
+      "description": "Say how a day felt, so Sunhold learns what is comfortable.",
+      "fields": {
+        "signal": {
+          "name": "How it felt",
+          "description": "Too cold, just right or too warm."
+        },
+        "zone": {
+          "name": "Zone",
+          "description": "Zone name or thermostat; all zones if empty."
+        },
+        "date": {
+          "name": "Date",
+          "description": "Which day; today if empty."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "not_loaded": {
+      "message": "Sunhold is not set up."
+    },
+    "feedback_not_recorded": {
+      "message": "No matching zone, or the date is not within the last 30 days."
+    }
+  }
+}
