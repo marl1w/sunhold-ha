@@ -88,7 +88,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SunholdConfigEntry) -> b
             frontend_url_path=PANEL_URL_PATH,
             module_url=f"{STATIC_URL}/sunhold-panel.js",
             sidebar_title="Sunhold",
-            sidebar_icon="mdi:sun-thermometer",
+            sidebar_icon="mdi:sun-snowflake-variant",
             require_admin=False,
         )
     return True
