@@ -135,6 +135,55 @@ async def test_cloudy_morning_does_not_hold(engine, hass, freezer) -> None:
     assert _rec(hass).state == "schedule"
 
 
+def _learned_house(engine, cloud_days: int = 0) -> None:
+    """Leave the journal as the back-fill does, with a cloud map of `cloud_days` days.
+
+    The back-fill gives a clear day and a fitted model, but never the cloud map.
+    """
+    for i in range(1, 15):
+        engine.journal.day(dt.date(2026, 11, 3) - dt.timedelta(days=i))["house"]["sun"] = 1.8
+    zone_id = next(iter(engine.zones))
+    # Strong sun response: the model alone holds even on the default map's overcast day.
+    engine.journal.data["models"][zone_id] = {"a": 2.0, "b": 0.0, "d": 0.0, "c": 0.0, "days": 31}
+    engine.journal.data["cloud_map"] = {"k": 0.45, "p": 2.5, "days": cloud_days, "mae": None}
+
+
+async def _plan_at_0530(engine, hass, freezer, cloud: float) -> dict:
+    with patch.object(engine, "_forecast", return_value={"cloud": cloud, "outdoor": 10.0}):
+        freezer.move_to(dt.datetime(2026, 11, 3, 4, 30, tzinfo=dt.UTC))  # 05:30 local
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+    return engine.journal.peek(dt.date(2026, 11, 3), next(iter(engine.zones)))["plan"]
+
+
+async def test_overcast_does_not_hold_while_the_cloud_map_is_unlearned(
+    engine, hass, freezer
+) -> None:
+    # 2026-11-04 on Villa 1: back-filled clear day, default cloud map, 100 % cloud - and
+    # the model held, because the default map promised 55 % of a clear day.
+    _learned_house(engine)
+    plan = await _plan_at_0530(engine, hass, freezer, cloud=100.0)
+    assert _rec(hass).state == "schedule"
+    assert plan["hold"] is False
+    assert plan["cloud_vetoed"] is True
+    assert plan["predicted_peak"] > plan["target"]  # the model still reports its view
+
+
+async def test_clear_forecast_holds_while_the_cloud_map_is_unlearned(engine, hass, freezer) -> None:
+    _learned_house(engine)
+    plan = await _plan_at_0530(engine, hass, freezer, cloud=20.0)
+    assert _rec(hass).state == "sun_hold"
+    assert plan["hold"] is True
+    assert "cloud_vetoed" not in plan
+
+
+async def test_a_learned_cloud_map_decides_alone(engine, hass, freezer) -> None:
+    _learned_house(engine, cloud_days=10)
+    plan = await _plan_at_0530(engine, hass, freezer, cloud=100.0)
+    assert _rec(hass).state == "sun_hold"
+    assert "cloud_vetoed" not in plan
+
+
 async def test_a_person_overriding_a_hold_is_learned(engine, hass, freezer) -> None:
     with patch.object(engine, "_forecast", return_value={"cloud": 20.0, "outdoor": 10.0}):
         freezer.move_to(dt.datetime(2026, 11, 3, 4, 30, tzinfo=dt.UTC))

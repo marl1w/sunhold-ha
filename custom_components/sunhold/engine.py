@@ -559,6 +559,12 @@ class Engine:
         day["house"]["forecast"] = forecast
         clear = self._clear(now.date())
         cmap = CloudMap.from_dict(self.journal.data["cloud_map"])
+        # The back-fill can give a clear day from recorder history on the first morning,
+        # but never the cloud map: past forecasts are not recorded. Until the map has
+        # learned from real days, its default reads an overcast forecast as half a clear
+        # day, so the forecast's own cloud cover has to gate the hold.
+        cloud_learned = cmap.days >= MIN_SUN_DAYS
+        cloud_ok = forecast["cloud"] <= FALLBACK_MAX_CLOUD
         models = self.models()
         for zone in self.zones.values():
             if self.season(zone) is not Season.WINTER:
@@ -568,14 +574,16 @@ class Engine:
             rec = self.journal.zone_day(now.date(), zone.zone_id)
             if clear is None or indoor is None:
                 # Not enough measured days to know what sun means here yet.
-                hold = forecast["cloud"] <= FALLBACK_MAX_CLOUD
-                rec["plan"] = {"hold": hold, "fallback": True, "cloud": forecast["cloud"]}
+                rec["plan"] = {"hold": cloud_ok, "fallback": True, "cloud": forecast["cloud"]}
             else:
                 sun = cmap.expected(clear, forecast["cloud"])
                 plan = plan_winter(
                     indoor, models[zone.zone_id], sun, forecast["outdoor"], target, HOLD_MARGIN
                 )
                 rec["plan"] = {**plan.as_dict(), "indoor": indoor, "cloud": forecast["cloud"]}
+                # The gate only ever vetoes: it cannot hold what the model would not.
+                if plan.hold and not cloud_learned and not cloud_ok:
+                    rec["plan"].update(hold=False, cloud_vetoed=True)
             zone.sun_hold = rec["plan"]["hold"]
             self.journal.event(now, "plan", zone.zone_id, **rec["plan"])
         self.journal.save()

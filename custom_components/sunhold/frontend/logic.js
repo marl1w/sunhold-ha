@@ -275,7 +275,7 @@ function scheduleReason(zone, overview, today, timeZone) {
   if (today.cancelled === "no_sun") return "The sun hold was called off: the forecast sun didn't come.";
   if (!plan) return "No plan yet today — it is made each morning from the forecast.";
   if (plan.hold) return `The sun hold ended at ${time(overview?.hold_until) || time(zone.until, timeZone)}.`;
-  if (plan.fallback) return `No sun hold today: too cloudy (${num(plan.cloud, 0)} % cloud).`;
+  if (plan.fallback || plan.cloud_vetoed) return `No sun hold today: too cloudy (${num(plan.cloud, 0)} % cloud).`;
   if (isNum(plan.predicted_peak) && isNum(plan.target)) {
     const limit = limitPhrase(zone, "sun");
     return `No sun hold today: the sun would bring it to ${temp(plan.predicted_peak)}, not safely above ${temp(plan.target)}${limit ? `. On a sun hold it ${limit}` : ""}.`;
@@ -345,7 +345,7 @@ export function dayDetails(day, zoneId, overview, timeZone) {
   const plan = z.plan;
   if (plan) {
     const cloud = isNum(plan.cloud) ? `${num(plan.cloud, 0)} % cloud forecast` : "";
-    if (plan.fallback) {
+    if (plan.fallback || plan.cloud_vetoed) {
       lines.push(`${plan.hold ? "Held for the sun" : "No sun hold"}: ${cloud || "forecast only"} (still learning).`);
     } else {
       const why = isNum(plan.predicted_peak) && isNum(plan.target)

@@ -156,6 +156,11 @@ test("headline: schedule explains why", () => {
     /20\.9 °C, not safely above 20\.8 °C\. On a sun hold it heats only below 19\.0 °C\./,
   );
   assert.match(L.headline(zone(), plan({ hold: false, fallback: true, cloud: 80 })).detail, /too cloudy \(80 % cloud\)/);
+  // The model alone would have held; the forecast's cloud vetoed it.
+  assert.match(
+    L.headline(zone(), plan({ hold: false, cloud_vetoed: true, predicted_peak: 21.2, target: 20.25, cloud: 100 })).detail,
+    /too cloudy \(100 % cloud\)/,
+  );
   assert.match(L.headline(zone(), plan({ hold: true }, { cancelled: "no_sun" })).detail, /called off/);
   assert.match(L.headline(zone(), plan({ hold: true })).detail, /ended at 13:00/);
   assert.equal(L.headline(zone(), overview({ features: { sun_hold: false } })).detail, "Sun hold is switched off.");
@@ -211,6 +216,8 @@ test("day details read as sentences", () => {
   // No sun sensor unit: no sun figure at all.
   assert.ok(L.dayDetails(day, "ground", overview({ sun_unit: null }), "UTC").includes("Measured: outdoor 7.4 °C."));
   assert.deepEqual(L.dayDetails({ zones: {} }, "ground", overview()), []);
+  const vetoed = { zones: { ground: { plan: { hold: false, cloud_vetoed: true, predicted_peak: 21.2, cloud: 100 } } } };
+  assert.equal(L.dayDetails(vetoed, "ground", overview())[0], "No sun hold: 100 % cloud forecast (still learning).");
 });
 
 test("KPIs: full days only, a baseline, and no percentage on too little data", () => {
