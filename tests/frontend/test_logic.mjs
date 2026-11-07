@@ -278,8 +278,10 @@ test("learning: verdict, progress, effects, forecast trust", () => {
   );
   assert.match(
     L.gateSentence({ cut: 820, resume: 1380, headroom: 640.4, draw_samples: 212 }, { solar_cooling: true }),
-    /below 820 W and resumes above 1380 W\. Right now: 640 W spare\. Tuned from 212/,
+    /below 820 W and resumes above 1380 W\. Right now: 640 W spare\. From the settings until .*\(212 readings so far\)/,
   );
+  assert.match(L.gateSentence({ cut: 820, resume: 1380, learned: true }, { solar_cooling: true }), /Tuned from the heat pump's measured draw\./);
+  assert.match(L.gateSentence({ cut: 820, resume: 1380, learning: false }, { solar_cooling: true }), /Set in the integration's settings\./);
   assert.equal(L.gateSentence({}, { solar_cooling: false }), "Solar pause is switched off.");
 });
 

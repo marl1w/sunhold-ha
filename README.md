@@ -37,7 +37,8 @@ dropped for the rest of that episode.
   - direct feedback (*too cold / just right / too warm*: buttons, a service, or the
     daily notification), and
   - overrides (someone turning a held zone up says it was wanted warmer).
-- **The heat pump's real draw**, which tunes the solar pause thresholds.
+- **The heat pump's real draw**, which tunes the summer solar thresholds (this can be
+  switched off in the settings).
 
 On first start, Sunhold learns from the recorder's long-term statistics, so it does not
 start blind.
@@ -49,6 +50,10 @@ start blind.
    - required: a forecast and a shaded outdoor temperature;
    - optional, each unlocks more: measured sun (irradiance, or solar power), solar
      power, whole-house power, heat pump power, a notify service.
+   - *Solar thresholds* (collapsed): how much the panels must spare for the heat pump,
+     after the house's own use. Winter boost starts above 1000 W and ends below 600 W;
+     summer cooling pauses below 900 W and resumes above 1500 W. Change them under
+     *Reconfigure* if your solar setup changes.
 3. **Zones:** add one per thermostat with *Add zone*:
    - the indoor temperature sensor;
    - the thermostat (read only);

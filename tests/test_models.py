@@ -233,6 +233,21 @@ def test_surplus_is_stored_below_holds_and_windows():
     assert intent_for(windy) is Intent.WINDOW_PAUSE
 
 
+@pytest.mark.parametrize(
+    ("target", "season", "expected"),
+    [
+        (20.25, Season.WINTER, 21.0),  # 20.75: a tie, up
+        (18.75, Season.WINTER, 19.5),  # 19.25: a tie, up - round() made it 19.0
+        (20.3, Season.WINTER, 21.0),
+        (25.25, Season.SUMMER, 25.0),  # 24.75: a tie, up - still in the comfort band
+        (25.75, Season.SUMMER, 25.5),  # 25.25: a tie, up
+    ],
+)
+def test_boost_ties_round_up_in_both_seasons(target, season, expected):
+    sp = Setpoints(sun_floor=19.0, window_heat=16.0, summer_pause=30.0, target=target)
+    assert setpoint_for(Intent.SOLAR_BOOST, season, sp) == expected
+
+
 def test_surplus_needs_twenty_minutes_and_ends_after_ten_below():
     surplus = SolarSurplus()
     for m in range(20):

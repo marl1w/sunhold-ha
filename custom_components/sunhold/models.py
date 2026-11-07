@@ -446,7 +446,8 @@ class SolarGate:
 class SolarSurplus:
     """On while the panels have power to spare for the heat pump, sustained.
 
-    Shares the gate's thresholds the other way round: on after `on_w` for 20 minutes,
+    In summer it shares the gate's thresholds the other way round; winter has its own,
+    lower pair (the engine sets them). On after `on_w` for 20 minutes,
     off after under `off_w` for 10, so it never flickers between the two.
     """
 

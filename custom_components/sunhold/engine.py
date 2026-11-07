@@ -35,20 +35,30 @@ from .const import (
     CONF_CLIMATE,
     CONF_HOLD_UNTIL,
     CONF_HOUSE_POWER,
+    CONF_LEARN_SUMMER,
     CONF_NOTIFY,
     CONF_OPENINGS,
     CONF_OUTDOOR_TEMP,
     CONF_PUMP_POWER,
     CONF_PV_POWER,
+    CONF_SUMMER_CUT_W,
     CONF_SUMMER_PAUSE,
+    CONF_SUMMER_RESUME_W,
     CONF_SUMMER_TARGET,
     CONF_SUN,
     CONF_SUN_FLOOR,
+    CONF_THRESHOLDS,
     CONF_WEATHER,
     CONF_WINDOW_HEAT,
+    CONF_WINTER_OFF_W,
+    CONF_WINTER_ON_W,
     CONF_WINTER_TARGET,
     CONF_ZONE_TEMP,
+    DEFAULT_CUT_W,
     DEFAULT_HOLD_UNTIL,
+    DEFAULT_RESUME_W,
+    DEFAULT_WINTER_OFF_W,
+    DEFAULT_WINTER_ON_W,
     DOMAIN,
     FEEDBACK_LABELS,
     HOLD_MARGIN,
@@ -174,9 +184,8 @@ class Engine:
 
     async def async_start(self) -> None:
         """Wire up listeners and timers, and pick the day up where it was left."""
+        self._apply_summer_thresholds()
         summer = self.journal.data["summer"]
-        if "cut" in summer:
-            self._set_thresholds(summer["cut"], summer["resume"])
         paused_at = dt_util.parse_datetime(summer.get("paused_at") or "")
         if paused_at and paused_at.date() == dt_util.now().date() and self._sun_up(dt_util.now()):
             self.gate.paused, self.gate.paused_at = True, paused_at
@@ -354,12 +363,33 @@ class Engine:
         # Excludes the pump's own draw, so the signal does not move when the pump stops.
         return pv - (house - pump)
 
-    def _set_thresholds(self, cut: float, resume: float) -> None:
+    def _threshold(self, key: str, default: float) -> float:
+        value = self.cfg.get(CONF_THRESHOLDS, {}).get(key)
+        return default if value is None else float(value)
+
+    def learns_summer(self) -> bool:
+        """Return whether the summer thresholds follow the pump's measured draw."""
+        return bool(self.cfg.get(CONF_THRESHOLDS, {}).get(CONF_LEARN_SUMMER, True))
+
+    def _apply_summer_thresholds(self) -> None:
+        """Set the gate from what was learned, or else from the settings."""
+        summer = self.journal.data["summer"]
+        if self.learns_summer() and "cut" in summer:
+            cut, resume = summer["cut"], summer["resume"]
+        else:
+            cut = self._threshold(CONF_SUMMER_CUT_W, DEFAULT_CUT_W)
+            resume = self._threshold(CONF_SUMMER_RESUME_W, DEFAULT_RESUME_W)
         self.gate.cut_w, self.gate.resume_w = cut, resume
-        self.surplus.off_w, self.surplus.on_w = cut, resume
 
     def _update_surplus(self, now: dt.datetime) -> None:
-        active = any(self.season(z) is not Season.OFF for z in self.zones.values())
+        seasons = {self.season(z) for z in self.zones.values()}
+        active = bool(seasons - {Season.OFF})
+        # Winter has its own, lower pair; summer shares the solar gate's the other way round.
+        if Season.WINTER in seasons:
+            self.surplus.on_w = self._threshold(CONF_WINTER_ON_W, DEFAULT_WINTER_ON_W)
+            self.surplus.off_w = self._threshold(CONF_WINTER_OFF_W, DEFAULT_WINTER_OFF_W)
+        else:
+            self.surplus.on_w, self.surplus.off_w = self.gate.resume_w, self.gate.cut_w
         headroom = self.headroom() if active and self.features["solar_boost"] else None
         was = self.surplus.active
         self.surplus.update(now, headroom, self._sun_up(now))
@@ -787,8 +817,9 @@ class Engine:
         summer = self.journal.data["summer"]
         draws = summer.get("draws", [])
         if len(draws) >= DRAWS_TO_CALIBRATE and (pair := cooling_thresholds(draws)):
+            # Kept even with learning off, so turning it on uses it at once.
             summer["cut"], summer["resume"] = pair
-            self._set_thresholds(*pair)
+            self._apply_summer_thresholds()
         self.journal.event(dt_util.now(), "refit")
         self.journal.prune(today)
         self.journal.save()
@@ -948,6 +979,8 @@ class Engine:
                 "resume": self.gate.resume_w,
                 "headroom": self.headroom(),
                 "draw_samples": len(self.journal.data["summer"].get("draws", [])),
+                "learning": self.learns_summer(),
+                "learned": self.learns_summer() and "cut" in self.journal.data["summer"],
             },
             "cloud_map": self.journal.data["cloud_map"],
             "clear_day": self._clear(today),

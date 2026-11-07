@@ -344,3 +344,64 @@ async def test_a_solar_pause_survives_a_restart(engine, hass, freezer) -> None:
     await hass.async_block_till_done()
     assert engine.entry.runtime_data.gate.paused
     assert _rec(hass).state == "solar_pause"
+
+
+def _power(hass: HomeAssistant, headroom: float) -> None:
+    """Set the meters so the panels could give the pump `headroom` W."""
+    hass.states.async_set("sensor.pump", "1000")
+    hass.states.async_set("sensor.house", "1500")
+    hass.states.async_set("sensor.pv", str(headroom + 500))
+
+
+async def test_a_modest_winter_surplus_is_stored(engine, hass, freezer) -> None:
+    freezer.move_to(dt.datetime(2026, 11, 3, 10, 0, tzinfo=dt.UTC))  # 11:00 local
+    _power(hass, 1200)  # under the summer 1500 W, over the winter 1000 W
+    await _advance(hass, freezer, 25)
+    assert _rec(hass).state == "solar_boost"
+    assert float(hass.states.get("sensor.sunhold_ground_floor_set_point").state) == 21.0
+    _power(hass, 500)
+    await _advance(hass, freezer, 12)
+    assert _rec(hass).state == "schedule"
+
+
+async def test_the_same_surplus_does_not_boost_in_summer(engine, hass, freezer) -> None:
+    freezer.move_to(dt.datetime(2026, 11, 3, 10, 0, tzinfo=dt.UTC))
+    hass.states.async_set(
+        "climate.ground", "cool", {"temperature": 27.0, "hvac_modes": ["off", "cool", "auto"]}
+    )
+    _power(hass, 1200)
+    await _advance(hass, freezer, 25)
+    assert _rec(hass).state == "schedule"
+    _power(hass, 2000)
+    await _advance(hass, freezer, 25)
+    assert _rec(hass).state == "solar_boost"
+
+
+async def test_the_winter_threshold_is_a_setting(engine, hass, freezer) -> None:
+    entry = engine.entry
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "solar_thresholds": {"winter_surplus_on_w": 1300}}
+    )
+    freezer.move_to(dt.datetime(2026, 11, 3, 10, 0, tzinfo=dt.UTC))
+    _power(hass, 1200)
+    await _advance(hass, freezer, 25)
+    assert _rec(hass).state == "schedule"
+
+
+async def test_learning_off_keeps_the_summer_pair_set_by_hand(engine, hass) -> None:
+    engine.journal.data["summer"].update(cut=1100, resume=1700)
+    engine._apply_summer_thresholds()
+    assert (engine.gate.cut_w, engine.gate.resume_w) == (1100, 1700)
+    hass.config_entries.async_update_entry(
+        engine.entry,
+        data={
+            **engine.entry.data,
+            "solar_thresholds": {
+                "summer_cut_w": 700,
+                "summer_resume_w": 1200,
+                "learn_summer_thresholds": False,
+            },
+        },
+    )
+    engine._apply_summer_thresholds()
+    assert (engine.gate.cut_w, engine.gate.resume_w) == (700, 1200)

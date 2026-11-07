@@ -12,7 +12,8 @@
           "house_power": "Whole-house power",
           "heat_pump_power": "Heat pump power",
           "notify_service": "Notify service",
-          "hold_until": "Winter sun hold ends at"
+          "hold_until": "Winter sun hold ends at",
+          "solar_thresholds": "Solar thresholds"
         },
         "data_description": {
           "outdoor_temperature": "A shaded sensor. One warmed by the sun reads high and skews the model.",
@@ -20,6 +21,26 @@
           "pv_power": "With whole-house and heat pump power, enables the summer solar gate.",
           "heat_pump_power": "Lets the winter model learn from mornings when the heating ran.",
           "notify_service": "For example notify.mobile_app_phone. Summaries carry Too cold / Just right / Too warm buttons."
+        },
+        "sections": {
+          "solar_thresholds": {
+            "name": "Solar thresholds",
+            "description": "What the panels must spare for the heat pump, in W (solar power minus the house without the pump). Change them if your solar setup changes.",
+            "data": {
+              "winter_surplus_on_w": "Winter boost starts above",
+              "winter_surplus_off_w": "Winter boost ends below",
+              "summer_resume_w": "Summer cooling resumes above",
+              "summer_cut_w": "Summer cooling pauses below",
+              "learn_summer_thresholds": "Learn the summer pair from the heat pump"
+            },
+            "data_description": {
+              "winter_surplus_on_w": "Held for 20 minutes before a zone is heated up to store the sun.",
+              "winter_surplus_off_w": "Held for 10 minutes before the boost ends.",
+              "summer_resume_w": "Also starts a summer boost.",
+              "summer_cut_w": "Held for 10 minutes, and only while the heat pump runs.",
+              "learn_summer_thresholds": "After about 33 hours of cooling, replace the summer pair with values from the pump's measured draw. Off: the pair above always applies."
+            }
+          }
         }
       },
       "reconfigure": {
@@ -32,7 +53,8 @@
           "house_power": "Whole-house power",
           "heat_pump_power": "Heat pump power",
           "notify_service": "Notify service",
-          "hold_until": "Winter sun hold ends at"
+          "hold_until": "Winter sun hold ends at",
+          "solar_thresholds": "Solar thresholds"
         },
         "data_description": {
           "outdoor_temperature": "A shaded sensor. One warmed by the sun reads high and skews the model.",
@@ -40,11 +62,35 @@
           "pv_power": "With whole-house and heat pump power, enables the summer solar gate.",
           "heat_pump_power": "Lets the winter model learn from mornings when the heating ran.",
           "notify_service": "For example notify.mobile_app_phone. Summaries carry Too cold / Just right / Too warm buttons."
+        },
+        "sections": {
+          "solar_thresholds": {
+            "name": "Solar thresholds",
+            "description": "What the panels must spare for the heat pump, in W (solar power minus the house without the pump). Change them if your solar setup changes.",
+            "data": {
+              "winter_surplus_on_w": "Winter boost starts above",
+              "winter_surplus_off_w": "Winter boost ends below",
+              "summer_resume_w": "Summer cooling resumes above",
+              "summer_cut_w": "Summer cooling pauses below",
+              "learn_summer_thresholds": "Learn the summer pair from the heat pump"
+            },
+            "data_description": {
+              "winter_surplus_on_w": "Held for 20 minutes before a zone is heated up to store the sun.",
+              "winter_surplus_off_w": "Held for 10 minutes before the boost ends.",
+              "summer_resume_w": "Also starts a summer boost.",
+              "summer_cut_w": "Held for 10 minutes, and only while the heat pump runs.",
+              "learn_summer_thresholds": "After about 33 hours of cooling, replace the summer pair with values from the pump's measured draw. Off: the pair above always applies."
+            }
+          }
         }
       }
     },
     "abort": {
       "reconfigure_successful": "Settings updated."
+    },
+    "error": {
+      "winter_order": "The winter boost must end below the value that starts it.",
+      "summer_order": "Summer cooling must pause below the value that resumes it."
     }
   },
   "config_subentries": {

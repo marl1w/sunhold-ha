@@ -21,6 +21,13 @@ CONF_HOUSE_POWER = "house_power"
 CONF_PUMP_POWER = "heat_pump_power"
 CONF_NOTIFY = "notify_service"
 CONF_HOLD_UNTIL = "hold_until"
+# The solar thresholds, in their own collapsed section of the house form.
+CONF_THRESHOLDS = "solar_thresholds"
+CONF_SUMMER_CUT_W = "summer_cut_w"
+CONF_SUMMER_RESUME_W = "summer_resume_w"
+CONF_LEARN_SUMMER = "learn_summer_thresholds"
+CONF_WINTER_ON_W = "winter_surplus_on_w"
+CONF_WINTER_OFF_W = "winter_surplus_off_w"
 
 # Per zone, on each zone subentry.
 CONF_CLIMATE = "climate"
@@ -51,10 +58,17 @@ MANUAL_GRACE_SECONDS = 3 * 60
 # Draw above which the heat pump counts as running: well above any standby draw, well
 # below any compressor run.
 PUMP_RUNNING_W = 200
-# Solar thresholds before the pump's own draw has been learned: cut cooling once the
-# panels can spare less than this, call it a surplus once they can spare more than that.
+# Default solar thresholds; each is a setting. Summer, until the pump's own draw has been
+# learned (or for good, with learning off): cut cooling once the panels can spare less
+# than this, call it a surplus once they can spare more than that.
 DEFAULT_CUT_W = 900
 DEFAULT_RESUME_W = 1500
+# A winter surplus needs less: the panels peak lower, and a boost only starts a run the
+# schedule would have made later on grid power anyway. Above 1000 W the sun still covers
+# most of a typical run (Villa 1 heats at 1.3-1.9 kW); under 600 W it covers too little.
+# The summer pair stays, because a pause there must not chatter around the pump's draw.
+DEFAULT_WINTER_ON_W = 1000
+DEFAULT_WINTER_OFF_W = 600
 
 # Winter: the sun hold is taken when the predicted free-running peak clears the comfort
 # target by this much - about the model's 90th-percentile error in practice, so a

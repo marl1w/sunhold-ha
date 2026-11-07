@@ -531,9 +531,12 @@ export function gateSentence(gate, features) {
   if (!features?.solar_cooling) return "Solar pause is switched off.";
   if (!gate) return "";
   const now = isNum(gate.headroom) ? ` Right now: ${Math.round(gate.headroom)} W spare.` : "";
-  const samples = gate.draw_samples
-    ? ` Tuned from ${gate.draw_samples} heat pump ${gate.draw_samples === 1 ? "reading" : "readings"}.`
-    : " Starting values until the heat pump has been measured.";
+  let samples;
+  if (gate.learning === false) samples = " Set in the integration's settings.";
+  else if (gate.learned) samples = " Tuned from the heat pump's measured draw.";
+  else if (gate.draw_samples)
+    samples = ` From the settings until the heat pump has been measured (${gate.draw_samples} ${gate.draw_samples === 1 ? "reading" : "readings"} so far).`;
+  else samples = " From the settings until the heat pump has been measured.";
   return `Cooling pauses when the solar surplus stays below ${Math.round(gate.cut)} W and resumes above ${Math.round(gate.resume)} W.${now}${samples}`;
 }
 

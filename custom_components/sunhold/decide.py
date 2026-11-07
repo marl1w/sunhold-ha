@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 from .const import BOOST_DELTA, Intent, Season
 
@@ -66,8 +67,10 @@ def setpoint_for(intent: Intent, season: Season, sp: Setpoints) -> float | None:
     if intent is Intent.SOLAR_BOOST:
         # Store the surplus as heat (or cold) in the house, up to the comfort band's edge.
         delta = BOOST_DELTA if season is Season.WINTER else -BOOST_DELTA
-        # Thermostats step in half degrees; a learned target need not.
-        return round((sp.target + delta) * 2) / 2
+        # Thermostats step in half degrees; a learned target need not. A tie rounds up in
+        # both seasons, which keeps the boost inside the comfort band either way (round()
+        # rounds ties to even, so 20.75 went to 21.0 but 19.25 to 19.0).
+        return math.floor((sp.target + delta) * 2 + 0.5) / 2
     if season is Season.SUMMER:
         return sp.summer_pause
     if intent is Intent.WINDOW_PAUSE:
