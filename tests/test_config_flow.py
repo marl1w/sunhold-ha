@@ -80,6 +80,16 @@ async def test_thresholds_default_to_the_built_in_values(hass: HomeAssistant) ->
     }
 
 
+async def test_away_defaults_to_an_hour_and_comfort_by_four(hass: HomeAssistant) -> None:
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], HOUSE)
+    assert result["result"].data["away"] == {
+        "away_delay_minutes": 60,
+        "comfortable_by": "16:00:00",
+        "recovery_minutes": 120,
+    }
+
+
 @pytest.mark.parametrize(
     ("thresholds", "error"),
     [

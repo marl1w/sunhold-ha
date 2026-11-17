@@ -137,6 +137,17 @@ test("headline: pauses use limits and window delays", () => {
   assert.equal(counting.detail, "A window is open — heating pauses after 5 minutes (heats only below 16.0 °C).");
 });
 
+test("headline: away", () => {
+  const a = L.headline(
+    zone({ intent: "away", setpoint: 18.5, until: "2026-11-03T13:00:00+00:00", limits: { away_heat: 18.5 } }),
+    overview(),
+    "Europe/Rome",
+  );
+  assert.equal(a.text, "Nobody home — set back (heats only below 18.5 °C)");
+  assert.equal(a.detail, "Back on schedule when someone is home, or at 14:00 to be comfortable in time.");
+  assert.equal(L.INTENT_LABEL.away, "Away");
+});
+
 test("headline: solar boost and unknown intents", () => {
   const w = L.headline(zone({ intent: "solar_boost", setpoint: 21 }), overview());
   assert.equal(w.text, "Storing solar heat — up to 21.0 °C");

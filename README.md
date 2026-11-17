@@ -19,10 +19,15 @@ thermostat works, and the logic stays independent of the hardware.
 | **Sun hold** (winter) | The morning forecast says the sun alone will bring the zone to its comfort target | A floor until midday. Heats only below it. |
 | **Solar pause** (summer) | The panels can no longer carry the heat pump | A high limit. Cools only above it. |
 | **Solar boost** | The panels have surplus to spare | The edge of the comfort band, to store the surplus in the house |
+| **Away** (winter) | Nobody has been home for a set time (needs a presence entity) | A setback, until someone is back or until the floor must start recovering to be comfortable by a set hour |
 | **Schedule** | Otherwise | The thermostat's own schedule |
 
-When several apply, the higher row wins. If a person overrides a recommendation, it is
-dropped for the rest of that episode.
+When several apply, the higher row wins: a solar surplus is still stored with nobody
+home. If a person overrides a recommendation, it is dropped for the rest of that episode.
+
+Each zone has its own **sun hold margin**: how far the sun must be predicted to take it
+past its target before it holds. A high margin keeps a living area warm in the morning on
+all but the sunniest days, while a bedroom can hold more readily.
 
 ## What it learns
 
@@ -50,6 +55,11 @@ start blind.
    - required: a forecast and a shaded outdoor temperature;
    - optional, each unlocks more: measured sun (irradiance, or solar power), solar
      power, whole-house power, heat pump power, a notify service.
+   - optional *presence*: a binary sensor, input boolean, person or group that is on
+     (or home) while anyone is in. *Away* (collapsed) sets how long the house must be
+     empty before zones are set back (default 60 min), the time it must be comfortable
+     again by (default 16:00), and how long the floor needs to get there (default
+     120 min, so the setback ends at 14:00 however long you stay out).
    - *Solar thresholds* (collapsed): how much the panels must spare for the heat pump,
      after the house's own use. Winter boost starts above 1000 W and ends below 600 W;
      summer cooling pauses below 900 W and resumes above 1500 W. Change them under
@@ -58,7 +68,9 @@ start blind.
    - the indoor temperature sensor;
    - the thermostat (read only);
    - the doors and windows that pause it;
-   - comfort targets for winter and summer, and the limits used while holding.
+   - comfort targets for winter and summer, and the limits used while holding, while a
+     window is open and while nobody is home;
+   - the sun hold margin (default 0.4 °C).
 
 ## Entities
 
@@ -66,7 +78,7 @@ Per zone:
 
 | Entity | Content |
 |---|---|
-| `sensor.sunhold_<zone>_recommendation` | `schedule` / `sun_hold` / `window_pause` / `solar_pause` / `solar_boost`. Attributes: `setpoint`, `since`, `until`, `season`. |
+| `sensor.sunhold_<zone>_recommendation` | `schedule` / `sun_hold` / `window_pause` / `solar_pause` / `solar_boost` / `away`. Attributes: `setpoint`, `since`, `until`, `season`. |
 | `sensor.sunhold_<zone>_set_point` | The temperature to apply, or unknown while the schedule rules |
 | `binary_sensor.sunhold_<zone>_override` | On while the zone should leave its schedule |
 | `sensor.sunhold_<zone>_comfort_target` | The target with what has been learned applied |
@@ -79,7 +91,7 @@ House:
 |---|---|
 | `binary_sensor.sunhold_solar_cooling_pause` | The summer solar pause |
 | `sensor.sunhold_solar_headroom` | What the panels could give the heat pump, in W |
-| Switches | Turn *Sun hold*, *Solar cooling*, *Solar boost* and *Window pause* on or off separately |
+| Switches | Turn *Sun hold*, *Solar cooling*, *Solar boost*, *Window pause* and *Away* on or off separately |
 
 Service: `sunhold.feedback` with `signal` (`too_cold` / `ok` / `too_warm`), plus optional
 `zone` and `date`.

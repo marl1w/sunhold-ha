@@ -13,14 +13,17 @@
           "heat_pump_power": "Heat pump power",
           "notify_service": "Notify service",
           "hold_until": "Winter sun hold ends at",
-          "solar_thresholds": "Solar thresholds"
+          "solar_thresholds": "Solar thresholds",
+          "presence": "Someone is home",
+          "away": "Away"
         },
         "data_description": {
           "outdoor_temperature": "A shaded sensor. One warmed by the sun reads high and skews the model.",
           "sun_sensor": "Measured sun. Lets Sunhold learn how far the forecast can be trusted, and check at 10:30 that the sun came.",
           "pv_power": "With whole-house and heat pump power, enables the summer solar gate.",
           "heat_pump_power": "Lets the winter model learn from mornings when the heating ran.",
-          "notify_service": "For example notify.mobile_app_phone. Summaries carry Too cold / Just right / Too warm buttons."
+          "notify_service": "For example notify.mobile_app_phone. Summaries carry Too cold / Just right / Too warm buttons.",
+          "presence": "On or home while anyone is in. With it, an empty house sets the zones back in winter."
         },
         "sections": {
           "solar_thresholds": {
@@ -40,6 +43,20 @@
               "summer_cut_w": "Held for 10 minutes, and only while the heat pump runs.",
               "learn_summer_thresholds": "After about 33 hours of cooling, replace the summer pair with values from the pump's measured draw. Off: the pair above always applies."
             }
+          },
+          "away": {
+            "name": "Away",
+            "description": "Used only with a presence entity. A floor heats slowly, so a short absence is not worth a setback.",
+            "data": {
+              "away_delay_minutes": "Set back after the house is empty for",
+              "comfortable_by": "Comfortable again by",
+              "recovery_minutes": "Time the floor needs to recover"
+            },
+            "data_description": {
+              "away_delay_minutes": "Shorter absences leave the schedule alone.",
+              "comfortable_by": "However long you stay out, the setback ends in time for this.",
+              "recovery_minutes": "The setback ends this long before the time above."
+            }
           }
         }
       },
@@ -54,14 +71,17 @@
           "heat_pump_power": "Heat pump power",
           "notify_service": "Notify service",
           "hold_until": "Winter sun hold ends at",
-          "solar_thresholds": "Solar thresholds"
+          "solar_thresholds": "Solar thresholds",
+          "presence": "Someone is home",
+          "away": "Away"
         },
         "data_description": {
           "outdoor_temperature": "A shaded sensor. One warmed by the sun reads high and skews the model.",
           "sun_sensor": "Measured sun. Lets Sunhold learn how far the forecast can be trusted, and check at 10:30 that the sun came.",
           "pv_power": "With whole-house and heat pump power, enables the summer solar gate.",
           "heat_pump_power": "Lets the winter model learn from mornings when the heating ran.",
-          "notify_service": "For example notify.mobile_app_phone. Summaries carry Too cold / Just right / Too warm buttons."
+          "notify_service": "For example notify.mobile_app_phone. Summaries carry Too cold / Just right / Too warm buttons.",
+          "presence": "On or home while anyone is in. With it, an empty house sets the zones back in winter."
         },
         "sections": {
           "solar_thresholds": {
@@ -80,6 +100,20 @@
               "summer_resume_w": "Also starts a summer boost.",
               "summer_cut_w": "Held for 10 minutes, and only while the heat pump runs.",
               "learn_summer_thresholds": "After about 33 hours of cooling, replace the summer pair with values from the pump's measured draw. Off: the pair above always applies."
+            }
+          },
+          "away": {
+            "name": "Away",
+            "description": "Used only with a presence entity. A floor heats slowly, so a short absence is not worth a setback.",
+            "data": {
+              "away_delay_minutes": "Set back after the house is empty for",
+              "comfortable_by": "Comfortable again by",
+              "recovery_minutes": "Time the floor needs to recover"
+            },
+            "data_description": {
+              "away_delay_minutes": "Shorter absences leave the schedule alone.",
+              "comfortable_by": "However long you stay out, the setback ends in time for this.",
+              "recovery_minutes": "The setback ends this long before the time above."
             }
           }
         }
@@ -112,7 +146,9 @@
             "summer_target": "Comfortable in summer",
             "sun_floor": "Sun hold floor",
             "window_pause_heat": "Window pause, winter",
-            "summer_pause": "Pause limit, summer"
+            "summer_pause": "Pause limit, summer",
+            "away_heat": "Away, winter",
+            "sun_hold_margin": "Sun hold margin"
           },
           "data_description": {
             "climate": "Read only: its heat/cool mode gives the season, and a person changing its set point is learned from.",
@@ -122,7 +158,9 @@
             "summer_target": "Above this by 1 °C, a solar pause ends.",
             "sun_floor": "While holding for the sun, heat only below this.",
             "window_pause_heat": "While a window is open, heat only below this.",
-            "summer_pause": "While paused in summer, cool only above this."
+            "summer_pause": "While paused in summer, cool only above this.",
+            "away_heat": "While nobody is home, heat only below this. A solar surplus is still stored.",
+            "sun_hold_margin": "How far the sun must be predicted to take the zone past its target before it holds. Higher: only on very sunny days."
           }
         },
         "reconfigure": {
@@ -136,7 +174,9 @@
             "summer_target": "Comfortable in summer",
             "sun_floor": "Sun hold floor",
             "window_pause_heat": "Window pause, winter",
-            "summer_pause": "Pause limit, summer"
+            "summer_pause": "Pause limit, summer",
+            "away_heat": "Away, winter",
+            "sun_hold_margin": "Sun hold margin"
           },
           "data_description": {
             "climate": "Read only: its heat/cool mode gives the season, and a person changing its set point is learned from.",
@@ -146,7 +186,9 @@
             "summer_target": "Above this by 1 °C, a solar pause ends.",
             "sun_floor": "While holding for the sun, heat only below this.",
             "window_pause_heat": "While a window is open, heat only below this.",
-            "summer_pause": "While paused in summer, cool only above this."
+            "summer_pause": "While paused in summer, cool only above this.",
+            "away_heat": "While nobody is home, heat only below this. A solar surplus is still stored.",
+            "sun_hold_margin": "How far the sun must be predicted to take the zone past its target before it holds. Higher: only on very sunny days."
           }
         }
       },
@@ -180,7 +222,8 @@
           "sun_hold": "Sun hold",
           "window_pause": "Window pause",
           "solar_pause": "Solar pause",
-          "solar_boost": "Solar boost"
+          "solar_boost": "Solar boost",
+          "away": "Away"
         }
       },
       "setpoint": {
@@ -208,6 +251,9 @@
       },
       "window_pause": {
         "name": "Window pause"
+      },
+      "away": {
+        "name": "Away"
       }
     }
   },

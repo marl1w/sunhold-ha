@@ -405,3 +405,122 @@ async def test_learning_off_keeps_the_summer_pair_set_by_hand(engine, hass) -> N
     )
     engine._apply_summer_thresholds()
     assert (engine.gate.cut_w, engine.gate.resume_w) == (700, 1200)
+
+
+# ------------------------------------------------------------------ away
+
+
+def _presence(hass: HomeAssistant, engine, state: str = "on", **away) -> None:
+    """Give the house a presence entity and the away settings `away`, with no sun."""
+    _power(hass, 0)
+    hass.config_entries.async_update_entry(
+        engine.entry,
+        data={**engine.entry.data, "presence": "binary_sensor.someone_home", "away": away},
+    )
+    hass.states.async_set("binary_sensor.someone_home", state)
+
+
+def _sp(hass: HomeAssistant) -> float:
+    return float(hass.states.get("sensor.sunhold_ground_floor_set_point").state)
+
+
+async def test_an_empty_house_sets_back_after_the_delay(engine, hass, freezer) -> None:
+    freezer.move_to(dt.datetime(2026, 11, 3, 8, 0, tzinfo=dt.UTC))  # 09:00 local
+    _presence(hass, engine, away_delay_minutes=45)
+    await _advance(hass, freezer, 1)
+    hass.states.async_set("binary_sensor.someone_home", "off")
+    await _advance(hass, freezer, 44)
+    assert _rec(hass).state == "schedule"
+    await _advance(hass, freezer, 2)
+    assert _rec(hass).state == "away"
+    assert _sp(hass) == 18.5
+    # Comfortable by 16:00 with two hours for the floor: back on schedule at 14:00.
+    assert _rec(hass).attributes["until"].startswith("2026-11-03T14:00")
+    hass.states.async_set("binary_sensor.someone_home", "on")
+    await _advance(hass, freezer, 1)
+    assert _rec(hass).state == "schedule"
+
+
+async def test_the_setback_ends_in_time_to_be_comfortable(engine, hass, freezer) -> None:
+    freezer.move_to(dt.datetime(2026, 11, 3, 11, 0, tzinfo=dt.UTC))  # 12:00 local
+    _presence(hass, engine, "off", away_delay_minutes=45, comfortable_by="16:00:00")
+    await _advance(hass, freezer, 46)
+    assert _rec(hass).state == "away"
+    freezer.move_to(dt.datetime(2026, 11, 3, 12, 59, tzinfo=dt.UTC))  # 13:59 local
+    await _advance(hass, freezer, 1)
+    assert _rec(hass).state == "schedule"  # still out, but the floor needs the time
+
+
+async def test_a_solar_surplus_is_stored_even_with_nobody_home(engine, hass, freezer) -> None:
+    freezer.move_to(dt.datetime(2026, 11, 3, 9, 0, tzinfo=dt.UTC))  # 10:00 local
+    _presence(hass, engine, "off", away_delay_minutes=15)
+    _power(hass, 1200)  # after _presence, which clears the sun
+    await _advance(hass, freezer, 25)
+    assert _rec(hass).state == "solar_boost"
+    _power(hass, 300)
+    await _advance(hass, freezer, 12)
+    assert _rec(hass).state == "away"
+
+
+async def test_a_schedule_already_lower_is_left_alone(engine, hass, freezer) -> None:
+    freezer.move_to(dt.datetime(2026, 11, 3, 8, 0, tzinfo=dt.UTC))
+    _states(hass, target=18.0)
+    _presence(hass, engine, "off", away_delay_minutes=0)
+    await _advance(hass, freezer, 2)
+    assert _rec(hass).state == "schedule"
+
+
+async def test_the_away_switch_and_no_presence_entity_mean_no_setback(
+    engine, hass, freezer
+) -> None:
+    freezer.move_to(dt.datetime(2026, 11, 3, 8, 0, tzinfo=dt.UTC))
+    _power(hass, 0)
+    hass.states.async_set("binary_sensor.someone_home", "off")
+    await _advance(hass, freezer, 70)
+    assert _rec(hass).state == "schedule"  # not configured: presence means nothing
+    _presence(hass, engine, "off")
+    await _advance(hass, freezer, 1)
+    assert _rec(hass).state == "away"  # the entity has been off for over an hour
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": "switch.sunhold_away"}, blocking=True
+    )
+    assert _rec(hass).state == "schedule"
+
+
+async def test_a_restart_does_not_restart_the_delay(engine, hass, freezer) -> None:
+    freezer.move_to(dt.datetime(2026, 11, 3, 8, 0, tzinfo=dt.UTC))
+    _presence(hass, engine, "on", away_delay_minutes=45)
+    await _advance(hass, freezer, 1)
+    hass.states.async_set("binary_sensor.someone_home", "off")
+    await _advance(hass, freezer, 30)
+    assert await hass.config_entries.async_reload(engine.entry.entry_id)
+    await hass.async_block_till_done()
+    await _advance(hass, freezer, 16)
+    assert _rec(hass).state == "away"
+
+
+async def test_an_unavailable_presence_keeps_what_was_known(engine, hass, freezer) -> None:
+    freezer.move_to(dt.datetime(2026, 11, 3, 8, 0, tzinfo=dt.UTC))
+    _presence(hass, engine, "off", away_delay_minutes=10)
+    await _advance(hass, freezer, 11)
+    hass.states.async_set("binary_sensor.someone_home", "unavailable")
+    await _advance(hass, freezer, 2)
+    assert _rec(hass).state == "away"
+
+
+async def test_a_zone_margin_keeps_the_hold_for_very_sunny_days(engine, hass, freezer) -> None:
+    _learned_house(engine, cloud_days=10)
+    zone = next(iter(engine.zones.values()))
+    # This model puts the peak near 21.5: clear of 20.5 + 0.4, short of 20.5 + 1.5.
+    engine.journal.data["models"][zone.zone_id] = {
+        "a": 1.0,
+        "b": 0.0,
+        "d": 0.0,
+        "c": 0.0,
+        "days": 31,
+    }
+    zone.cfg["sun_hold_margin"] = 1.5
+    plan = await _plan_at_0530(engine, hass, freezer, cloud=20.0)
+    assert plan["hold"] is False
+    assert plan["target"] + 0.4 < plan["predicted_peak"] < plan["target"] + 1.5
+    assert _rec(hass).state == "schedule"

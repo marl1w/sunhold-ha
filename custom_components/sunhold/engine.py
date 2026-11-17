@@ -32,15 +32,22 @@ from . import history
 from .const import (
     COMFORT_BAND_HIGH,
     COMFORT_BAND_LOW,
+    CONF_AWAY,
+    CONF_AWAY_DELAY,
+    CONF_AWAY_HEAT,
     CONF_CLIMATE,
+    CONF_COMFORT_BY,
+    CONF_HOLD_MARGIN,
     CONF_HOLD_UNTIL,
     CONF_HOUSE_POWER,
     CONF_LEARN_SUMMER,
     CONF_NOTIFY,
     CONF_OPENINGS,
     CONF_OUTDOOR_TEMP,
+    CONF_PRESENCE,
     CONF_PUMP_POWER,
     CONF_PV_POWER,
+    CONF_RECOVERY,
     CONF_SUMMER_CUT_W,
     CONF_SUMMER_PAUSE,
     CONF_SUMMER_RESUME_W,
@@ -54,8 +61,12 @@ from .const import (
     CONF_WINTER_ON_W,
     CONF_WINTER_TARGET,
     CONF_ZONE_TEMP,
+    DEFAULT_AWAY_DELAY,
+    DEFAULT_AWAY_HEAT,
+    DEFAULT_COMFORT_BY,
     DEFAULT_CUT_W,
     DEFAULT_HOLD_UNTIL,
+    DEFAULT_RECOVERY,
     DEFAULT_RESUME_W,
     DEFAULT_WINTER_OFF_W,
     DEFAULT_WINTER_ON_W,
@@ -63,6 +74,7 @@ from .const import (
     FEEDBACK_LABELS,
     HOLD_MARGIN,
     MANUAL_GRACE_SECONDS,
+    PRESENCE_HOME,
     PUMP_RUNNING_W,
     SUN_CHECK_MIN_RATIO,
     WINDOW_CLOSED_SECONDS,
@@ -161,7 +173,10 @@ class Engine:
             "solar_cooling": True,
             "solar_boost": True,
             "window_pause": True,
+            "away": True,
         }
+        # When the house was last seen empty, or None while someone is home.
+        self.away_since: dt.datetime | None = None
         self.gate = SolarGate()
         self.surplus = SolarSurplus()
         self._unsubs: list[Callable[[], None]] = []
@@ -193,6 +208,8 @@ class Engine:
         watched = [z.climate for z in self.zones.values() if z.climate]
         for zone in self.zones.values():
             watched += zone.cfg.get(CONF_OPENINGS, [])
+        if presence := self.cfg.get(CONF_PRESENCE):
+            watched.append(presence)
         if watched:
             self._unsubs.append(
                 async_track_state_change_event(self.hass, watched, self._on_state_change)
@@ -239,6 +256,33 @@ class Engine:
         text = self.cfg.get(CONF_HOLD_UNTIL) or DEFAULT_HOLD_UNTIL
         hour, minute, *_ = (int(x) for x in text.split(":"))
         return hour, minute
+
+    def _away_cfg(self) -> dict[str, Any]:
+        return self.cfg.get(CONF_AWAY) or {}
+
+    def away_delay(self) -> dt.timedelta:
+        """Return how long the house must be empty before zones are set back."""
+        return dt.timedelta(
+            minutes=float(self._away_cfg().get(CONF_AWAY_DELAY, DEFAULT_AWAY_DELAY))
+        )
+
+    def recovery_start(self, now: dt.datetime) -> dt.datetime:
+        """Return when today's setback must end so the house is comfortable in time.
+
+        However long people stay out, the floor needs the recovery time to bring the
+        house back to comfort by the configured hour.
+        """
+        text = str(self._away_cfg().get(CONF_COMFORT_BY) or DEFAULT_COMFORT_BY)
+        hour, minute, *_ = (int(x) for x in text.split(":"))
+        by = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        lead = float(self._away_cfg().get(CONF_RECOVERY, DEFAULT_RECOVERY))
+        return by - dt.timedelta(minutes=lead)
+
+    def away(self, now: dt.datetime) -> bool:
+        """Return whether the house has been empty long enough to set zones back."""
+        if self.away_since is None or not self.features["away"]:
+            return False
+        return now - self.away_since >= self.away_delay() and now < self.recovery_start(now)
 
     def _restore_today(self) -> None:
         now = dt_util.now()
@@ -330,6 +374,7 @@ class Engine:
         self._update_windows(now)
         self._update_gate(now, sample=sample)
         self._update_surplus(now)
+        self._update_presence(now)
         self._watch_people(now)
         for zone in self.zones.values():
             self._reconcile(zone, now)
@@ -352,6 +397,29 @@ class Engine:
                     zone.window_open = False
                     # A person who overrode a window pause did so for that opening only.
                     zone.suppressed.discard(Intent.WINDOW_PAUSE)
+
+    def _update_presence(self, now: dt.datetime) -> None:
+        """Follow the presence entity. An unavailable one keeps what was last known."""
+        entity_id = self.cfg.get(CONF_PRESENCE)
+        state = self.hass.states.get(entity_id) if entity_id else None
+        if state is None:
+            if not entity_id:
+                self.away_since = None
+            return
+        if state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            return
+        if state.state in PRESENCE_HOME:
+            if self.away_since is not None:
+                self.away_since = None
+                self.journal.event(now, "home")
+                # Someone who overrode a setback did so for that absence only.
+                for zone in self.zones.values():
+                    zone.suppressed.discard(Intent.AWAY)
+            return
+        if self.away_since is None:
+            # The entity's own change time, so a restart does not restart the delay.
+            self.away_since = min(state.last_changed, now)
+            self.journal.event(now, "away", since=self.away_since.isoformat(timespec="seconds"))
 
     def headroom(self) -> float | None:
         """Return what the panels could give the heat pump now, in W."""
@@ -502,6 +570,7 @@ class Engine:
             float(zone.cfg[CONF_WINDOW_HEAT]),
             float(zone.cfg[CONF_SUMMER_PAUSE]),
             self.target(zone, season) if season is not Season.OFF else 0.0,
+            float(zone.cfg.get(CONF_AWAY_HEAT, DEFAULT_AWAY_HEAT)),
         )
         situation = ZoneSituation(
             season=season,
@@ -510,6 +579,7 @@ class Engine:
             solar_paused=self.gate.paused,
             solar_surplus=self.surplus.active
             and boost_helps(season, setpoint_for(Intent.SOLAR_BOOST, season, setpoints), zone),
+            away=self.away(now) and setback_helps(setpoints.away, zone),
             suppressed=frozenset(zone.suppressed),
         )
         intent = intent_for(situation)
@@ -535,6 +605,8 @@ class Engine:
 
     def until(self, zone: Zone) -> dt.datetime | None:
         """Return when the current recommendation is planned to end, if it is known."""
+        if zone.intent is Intent.AWAY:
+            return self.recovery_start(dt_util.now())
         if zone.intent is not Intent.SUN_HOLD:
             return None
         hour, minute = self._hold_until()
@@ -608,7 +680,12 @@ class Engine:
             else:
                 sun = cmap.expected(clear, forecast["cloud"])
                 plan = plan_winter(
-                    indoor, models[zone.zone_id], sun, forecast["outdoor"], target, HOLD_MARGIN
+                    indoor,
+                    models[zone.zone_id],
+                    sun,
+                    forecast["outdoor"],
+                    target,
+                    hold_margin(zone),
                 )
                 rec["plan"] = {**plan.as_dict(), "indoor": indoor, "cloud": forecast["cloud"]}
                 # The gate only ever vetoes: it cannot hold what the model would not.
@@ -959,6 +1036,8 @@ class Engine:
                         "sun_floor": float(zone.cfg[CONF_SUN_FLOOR]),
                         "window_pause_heat": float(zone.cfg[CONF_WINDOW_HEAT]),
                         "summer_pause": float(zone.cfg[CONF_SUMMER_PAUSE]),
+                        "away_heat": float(zone.cfg.get(CONF_AWAY_HEAT, DEFAULT_AWAY_HEAT)),
+                        "sun_hold_margin": hold_margin(zone),
                     },
                 }
             )
@@ -973,6 +1052,12 @@ class Engine:
             "features": dict(self.features),
             "hold_until": "{:02d}:{:02d}".format(*self._hold_until()),
             "surplus": self.surplus.active,
+            "presence": {
+                "configured": bool(self.cfg.get(CONF_PRESENCE)),
+                "away_since": self.away_since.isoformat() if self.away_since else None,
+                "delay_minutes": self.away_delay().total_seconds() / 60,
+                "recovery_start": self.recovery_start(dt_util.now()).strftime("%H:%M"),
+            },
             "gate": {
                 "paused": self.gate.paused,
                 "cut": self.gate.cut_w,
@@ -1023,3 +1108,16 @@ def boost_helps(season: Season, boost: float | None, zone: Zone) -> bool:
     if season is Season.WINTER:
         return boost > zone.schedule_setpoint
     return boost < zone.schedule_setpoint
+
+
+def setback_helps(away: float, zone: Zone) -> bool:
+    """Return whether setting a zone back would ask for less than its schedule.
+
+    A schedule already lower than the away set point makes the setback a boost.
+    """
+    return zone.schedule_setpoint is None or away < zone.schedule_setpoint
+
+
+def hold_margin(zone: Zone) -> float:
+    """Return how far a zone's predicted peak must clear its target to hold for the sun."""
+    return float(zone.cfg.get(CONF_HOLD_MARGIN, HOLD_MARGIN))

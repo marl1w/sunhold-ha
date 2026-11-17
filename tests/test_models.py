@@ -269,3 +269,18 @@ def test_surplus_ends_at_sunset_or_lost_metering():
     assert not surplus.update(T0, 2000, False)
     surplus = SolarSurplus(active=True)
     assert not surplus.update(T0, None, True)
+
+
+def test_an_empty_house_comes_after_the_sun_and_the_panels():
+    sp = Setpoints(sun_floor=19.0, window_heat=16.0, summer_pause=30.0, target=20.5, away=18.5)
+    away = ZoneSituation(Season.WINTER, False, sun_hold=False, solar_paused=False, away=True)
+    assert intent_for(away) is Intent.AWAY
+    assert setpoint_for(Intent.AWAY, Season.WINTER, sp) == 18.5
+    boosted = ZoneSituation(
+        Season.WINTER, False, sun_hold=False, solar_paused=False, solar_surplus=True, away=True
+    )
+    assert intent_for(boosted) is Intent.SOLAR_BOOST
+    held = ZoneSituation(Season.WINTER, False, sun_hold=True, solar_paused=False, away=True)
+    assert intent_for(held) is Intent.SUN_HOLD
+    summer = ZoneSituation(Season.SUMMER, False, sun_hold=False, solar_paused=False, away=True)
+    assert intent_for(summer) is Intent.SCHEDULE

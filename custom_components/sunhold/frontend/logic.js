@@ -15,6 +15,7 @@ export const INTENT_LABEL = {
   window_pause: "Window pause",
   solar_pause: "Solar pause",
   solar_boost: "Solar boost",
+  away: "Away",
 };
 
 /** Days back that feedback is still accepted for (the backend refuses older ones). */
@@ -195,6 +196,7 @@ function limitPhrase(zone, kind) {
     if (winter) return isNum(l.window_pause_heat) ? `heats only below ${temp(l.window_pause_heat)}` : "";
     return isNum(l.summer_pause) ? `cools only above ${temp(l.summer_pause)}` : "";
   }
+  if (kind === "away") return isNum(l.away_heat) ? `heats only below ${temp(l.away_heat)}` : "";
   if (kind === "solar") return isNum(l.summer_pause) ? `cools only above ${temp(l.summer_pause)}` : "";
   return "";
 }
@@ -247,6 +249,17 @@ export function headline(zone, overview, timeZone) {
           ? `Storing solar heat${sp ? ` — up to ${sp}` : ""}`
           : `Storing solar cool${sp ? ` — down to ${sp}` : ""}`,
         detail: "There is spare solar power, so the floor stores it for later.",
+      };
+    }
+    case "away": {
+      const until = time(zone.until, timeZone);
+      const limit = limitPhrase(zone, "away");
+      return {
+        tone: "pause",
+        text: `Nobody home — set back${limit ? ` (${limit})` : ""}`,
+        detail: until
+          ? `Back on schedule when someone is home, or at ${until} to be comfortable in time.`
+          : "Back on schedule when someone is home.",
       };
     }
     default:

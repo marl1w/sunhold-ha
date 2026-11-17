@@ -28,6 +28,12 @@ CONF_SUMMER_RESUME_W = "summer_resume_w"
 CONF_LEARN_SUMMER = "learn_summer_thresholds"
 CONF_WINTER_ON_W = "winter_surplus_on_w"
 CONF_WINTER_OFF_W = "winter_surplus_off_w"
+# Presence, with its own collapsed section of the house form.
+CONF_PRESENCE = "presence"
+CONF_AWAY = "away"
+CONF_AWAY_DELAY = "away_delay_minutes"
+CONF_COMFORT_BY = "comfortable_by"
+CONF_RECOVERY = "recovery_minutes"
 
 # Per zone, on each zone subentry.
 CONF_CLIMATE = "climate"
@@ -38,6 +44,8 @@ CONF_SUMMER_TARGET = "summer_target"
 CONF_SUN_FLOOR = "sun_floor"
 CONF_WINDOW_HEAT = "window_pause_heat"
 CONF_SUMMER_PAUSE = "summer_pause"
+CONF_AWAY_HEAT = "away_heat"
+CONF_HOLD_MARGIN = "sun_hold_margin"
 
 DEFAULT_HOLD_UNTIL = "13:00:00"
 DEFAULT_WINTER_TARGET = 20.5
@@ -45,6 +53,16 @@ DEFAULT_SUMMER_TARGET = 25.5
 DEFAULT_SUN_FLOOR = 19.0
 DEFAULT_WINDOW_HEAT = 16.0
 DEFAULT_SUMMER_PAUSE = 30.0
+DEFAULT_AWAY_HEAT = 18.5
+# Away: how long the house must be empty before a zone is set back, the time it must be
+# comfortable again by however long people stay out, and how long the floor needs to get
+# there. A slab stores heat for hours, so a short absence is not worth a setback.
+DEFAULT_AWAY_DELAY = 60
+DEFAULT_COMFORT_BY = "16:00:00"
+DEFAULT_RECOVERY = 120
+# States of the presence entity that mean someone is home: a binary sensor, an
+# input boolean, a group of people, or a person.
+PRESENCE_HOME = ("on", "home")
 
 # An opening counts once it has stayed open this long, so walking through a door does
 # not pause anything, and is over once it has stayed shut this long.
@@ -74,6 +92,7 @@ DEFAULT_WINTER_OFF_W = 600
 # target by this much - about the model's 90th-percentile error in practice, so a
 # wrong hold is a rare and small miss.
 HOLD_MARGIN = 0.4
+MAX_HOLD_MARGIN = 3.0
 # The comfort band around a zone's (learned) target: what counts as comfortable in the
 # daily comfort score, and how far a solar boost may push a zone to store surplus.
 COMFORT_BAND_LOW = 0.5
@@ -95,6 +114,7 @@ class Intent(StrEnum):
     WINDOW_PAUSE = "window_pause"
     SOLAR_PAUSE = "solar_pause"
     SOLAR_BOOST = "solar_boost"
+    AWAY = "away"
 
 
 class Season(StrEnum):

@@ -17,15 +17,22 @@ from homeassistant.helpers import selector
 import voluptuous as vol
 
 from .const import (
+    CONF_AWAY,
+    CONF_AWAY_DELAY,
+    CONF_AWAY_HEAT,
     CONF_CLIMATE,
+    CONF_COMFORT_BY,
+    CONF_HOLD_MARGIN,
     CONF_HOLD_UNTIL,
     CONF_HOUSE_POWER,
     CONF_LEARN_SUMMER,
     CONF_NOTIFY,
     CONF_OPENINGS,
     CONF_OUTDOOR_TEMP,
+    CONF_PRESENCE,
     CONF_PUMP_POWER,
     CONF_PV_POWER,
+    CONF_RECOVERY,
     CONF_SUMMER_CUT_W,
     CONF_SUMMER_PAUSE,
     CONF_SUMMER_RESUME_W,
@@ -39,8 +46,12 @@ from .const import (
     CONF_WINTER_ON_W,
     CONF_WINTER_TARGET,
     CONF_ZONE_TEMP,
+    DEFAULT_AWAY_DELAY,
+    DEFAULT_AWAY_HEAT,
+    DEFAULT_COMFORT_BY,
     DEFAULT_CUT_W,
     DEFAULT_HOLD_UNTIL,
+    DEFAULT_RECOVERY,
     DEFAULT_RESUME_W,
     DEFAULT_SUMMER_PAUSE,
     DEFAULT_SUMMER_TARGET,
@@ -50,6 +61,8 @@ from .const import (
     DEFAULT_WINTER_ON_W,
     DEFAULT_WINTER_TARGET,
     DOMAIN,
+    HOLD_MARGIN,
+    MAX_HOLD_MARGIN,
     SUBENTRY_ZONE,
 )
 
@@ -63,6 +76,29 @@ _TEMP = selector.NumberSelector(
 _WATTS = selector.NumberSelector(
     selector.NumberSelectorConfig(
         min=0, max=20000, step=50, unit_of_measurement="W", mode=selector.NumberSelectorMode.BOX
+    )
+)
+
+
+def _minutes(maximum: int, step: int) -> selector.NumberSelector:
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=0,
+            max=maximum,
+            step=step,
+            unit_of_measurement="min",
+            mode=selector.NumberSelectorMode.BOX,
+        )
+    )
+
+
+_MARGIN = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=0,
+        max=MAX_HOLD_MARGIN,
+        step=0.1,
+        unit_of_measurement="°C",
+        mode=selector.NumberSelectorMode.BOX,
     )
 )
 
@@ -96,6 +132,30 @@ def _house_schema(current: dict[str, Any]) -> vol.Schema:
             vol.Required(CONF_THRESHOLDS, default={}): section(
                 _thresholds_schema(current.get(CONF_THRESHOLDS, {})), {"collapsed": True}
             ),
+            opt(CONF_PRESENCE): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain=["binary_sensor", "input_boolean", "person", "group"]
+                )
+            ),
+            vol.Required(CONF_AWAY, default={}): section(
+                _away_schema(current.get(CONF_AWAY, {})), {"collapsed": True}
+            ),
+        }
+    )
+
+
+def _away_schema(current: dict[str, Any]) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_AWAY_DELAY, default=current.get(CONF_AWAY_DELAY, DEFAULT_AWAY_DELAY)
+            ): _minutes(600, 5),
+            vol.Required(
+                CONF_COMFORT_BY, default=current.get(CONF_COMFORT_BY, DEFAULT_COMFORT_BY)
+            ): selector.TimeSelector(),
+            vol.Required(
+                CONF_RECOVERY, default=current.get(CONF_RECOVERY, DEFAULT_RECOVERY)
+            ): _minutes(600, 15),
         }
     )
 
@@ -189,6 +249,8 @@ def _zone_schema(current: dict[str, Any]) -> vol.Schema:
             req(CONF_SUN_FLOOR, DEFAULT_SUN_FLOOR): _TEMP,
             req(CONF_WINDOW_HEAT, DEFAULT_WINDOW_HEAT): _TEMP,
             req(CONF_SUMMER_PAUSE, DEFAULT_SUMMER_PAUSE): _TEMP,
+            req(CONF_AWAY_HEAT, DEFAULT_AWAY_HEAT): _TEMP,
+            req(CONF_HOLD_MARGIN, HOLD_MARGIN): _MARGIN,
         }
     )
 

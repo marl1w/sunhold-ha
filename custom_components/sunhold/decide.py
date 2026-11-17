@@ -17,6 +17,7 @@ class ZoneSituation:
     sun_hold: bool
     solar_paused: bool
     solar_surplus: bool = False
+    away: bool = False
     suppressed: frozenset[Intent] = frozenset()
 
 
@@ -28,6 +29,7 @@ class Setpoints:
     window_heat: float
     summer_pause: float
     target: float
+    away: float = 0.0
 
 
 def intent_for(s: ZoneSituation) -> Intent:
@@ -35,8 +37,10 @@ def intent_for(s: ZoneSituation) -> Intent:
 
     An open window outranks everything: heating or cooling a room with the outside
     let in is waste whatever else is going on. Holding back for the sun or the panels
-    comes next, then storing a solar surplus in the house. One a person has
-    overridden today is skipped, so the next one down applies - or the schedule.
+    comes next, then storing a solar surplus in the house - even with nobody home,
+    since the panels' surplus is free. An empty house setting a zone back comes last.
+    One a person has overridden is skipped, so the next one down applies - or the
+    schedule.
     """
     if s.season is Season.OFF:
         return Intent.SCHEDULE
@@ -49,6 +53,8 @@ def intent_for(s: ZoneSituation) -> Intent:
         candidates.append(Intent.SOLAR_PAUSE)
     if s.solar_surplus:
         candidates.append(Intent.SOLAR_BOOST)
+    if s.season is Season.WINTER and s.away:
+        candidates.append(Intent.AWAY)
     for intent in candidates:
         if intent not in s.suppressed:
             return intent
@@ -71,6 +77,8 @@ def setpoint_for(intent: Intent, season: Season, sp: Setpoints) -> float | None:
         # both seasons, which keeps the boost inside the comfort band either way (round()
         # rounds ties to even, so 20.75 went to 21.0 but 19.25 to 19.0).
         return math.floor((sp.target + delta) * 2 + 0.5) / 2
+    if intent is Intent.AWAY:
+        return sp.away
     if season is Season.SUMMER:
         return sp.summer_pause
     if intent is Intent.WINDOW_PAUSE:
