@@ -208,7 +208,7 @@ class SunholdConfigFlow(ConfigFlow, domain=DOMAIN):
         entry = self._get_reconfigure_entry()
         errors = _threshold_errors(user_input) if user_input is not None else {}
         if user_input is not None and not errors:
-            return self.async_update_reload_and_abort(entry, data=user_input)
+            return self.async_update_and_abort(entry, data=user_input)
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=_house_schema(user_input or dict(entry.data)),
