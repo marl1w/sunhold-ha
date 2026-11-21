@@ -24,7 +24,16 @@ from .const import DEFAULT_CUT_W, DEFAULT_RESUME_W, PUMP_RUNNING_W, Feedback, Se
 # Winter mornings almost always heat, so the model learns from heated days too and the
 # decision asks it about heat = 0. The prior is a plausible floor-heated house; with few
 # days of its own the fit leans on it, with many it forgets it.
-PRIOR = (0.7, -0.05, 0.1, -0.6)
+#
+# b must be positive: the milder it is outside, the less heat the house loses and the
+# further it climbs. Outdoor temperature and morning heating move together (cold days are
+# heated days), so the data alone separate the two poorly, and a prior with the wrong
+# sign (b = -0.05 until 0.3.0) held b near zero: warm days earned no credit, and a 16 C
+# November day was forecast as a cold one (Villa 1, 2026-11-20). Fitted on its own 48
+# days that house gives b = +0.05 to +0.07.
+PRIOR = (0.6, 0.05, 0.2, 0.3)
+# The floor b is held to if a fit still lands below it.
+MIN_OUTDOOR_COEF = 0.01
 PRIOR_DAYS = 5.0
 # Short enough to follow the season mid-winter, long enough to average out the weather.
 HALF_LIFE_DAYS = 14.0
@@ -118,6 +127,20 @@ def _weighted_fit(
     return _solve(m, v)
 
 
+def _constrained_fit(
+    obs: Sequence[DayObservation], weights: Sequence[float], prior: Sequence[float]
+) -> list[float]:
+    """Fit, then refit with the outdoor coefficient fixed if it came out unphysical."""
+    coef = _weighted_fit(obs, weights, prior)
+    if coef[1] >= MIN_OUTDOOR_COEF:
+        return coef
+    b = MIN_OUTDOOR_COEF
+    # Take b's share out of each rise and fit the other three on what is left.
+    shifted = [DayObservation(o.day, o.sun, 0.0, o.heat, o.rise - b * o.delta_out) for o in obs]
+    rest = _weighted_fit(shifted, weights, prior)
+    return [rest[0], b, rest[2], rest[3]]
+
+
 def fit_rise(
     obs: Iterable[DayObservation],
     today: dt.date,
@@ -136,14 +159,14 @@ def fit_rise(
     if not obs:
         return RiseModel(*prior)
     weights = [0.5 ** ((today - o.day).days / half_life) for o in obs]
-    coef = _weighted_fit(obs, weights, prior)
+    coef = _constrained_fit(obs, weights, prior)
 
     mae = None
     if len(obs) >= MIN_DAYS:
         errors = []
         for i in range(max(0, len(obs) - ACCURACY_DAYS), len(obs)):
             o = obs[i]
-            ci = _weighted_fit(obs[:i] + obs[i + 1 :], weights[:i] + weights[i + 1 :], prior)
+            ci = _constrained_fit(obs[:i] + obs[i + 1 :], weights[:i] + weights[i + 1 :], prior)
             errors.append(abs(sum(c * x for c, x in zip(ci, o.features(), strict=True)) - o.rise))
         mae = round(sum(errors) / len(errors), 3)
     return RiseModel(*coef, len(obs), mae)

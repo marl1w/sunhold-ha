@@ -10,6 +10,7 @@ import pytest
 from custom_components.sunhold.const import Feedback, Intent, Season
 from custom_components.sunhold.decide import Setpoints, ZoneSituation, intent_for, setpoint_for
 from custom_components.sunhold.models import (
+    MIN_OUTDOOR_COEF,
     PRIOR,
     CloudMap,
     Comfort,
@@ -28,7 +29,7 @@ from custom_components.sunhold.models import (
 TODAY = dt.date(2026, 11, 3)
 
 
-def _days(n, a=0.8, b=-0.04, d=0.15, c=-0.5, noise=0.0, seed=1):
+def _days(n, a=0.7, b=0.06, d=0.25, c=0.4, noise=0.0, seed=1):
     rng = random.Random(seed)
     out = []
     for i in range(n):
@@ -40,11 +41,24 @@ def _days(n, a=0.8, b=-0.04, d=0.15, c=-0.5, noise=0.0, seed=1):
 
 def test_fit_recovers_known_coefficients():
     model = fit_rise(_days(60), TODAY)
-    assert model.a == pytest.approx(0.8, abs=0.05)
-    assert model.d == pytest.approx(0.15, abs=0.02)
-    assert model.c == pytest.approx(-0.5, abs=0.15)
+    assert model.a == pytest.approx(0.7, abs=0.05)
+    assert model.d == pytest.approx(0.25, abs=0.02)
+    assert model.c == pytest.approx(0.4, abs=0.15)
     assert model.days == 60
     assert model.mae is not None and model.mae < 0.05
+
+
+def test_fit_recovers_the_outdoor_effect():
+    assert fit_rise(_days(60), TODAY).b == pytest.approx(0.06, abs=0.02)
+
+
+def test_the_outdoor_effect_is_never_negative():
+    # Cold days are heated days, so noise can pull b below zero; a milder day losing the
+    # house less heat is physics, not something to learn the other way round.
+    model = fit_rise(_days(60, b=-0.08), TODAY)
+    assert model.b == pytest.approx(MIN_OUTDOOR_COEF)
+    assert model.a == pytest.approx(0.7, abs=0.15)
+    assert model.mae is not None
 
 
 def test_no_days_is_the_prior():
@@ -63,7 +77,7 @@ def test_recent_days_win_over_old_ones():
         for o in _days(40, a=0.4)
     ]
     model = fit_rise(old + _days(20, a=1.0, seed=2), TODAY)
-    assert model.a > 0.8
+    assert model.a > 0.7  # 40 days at 0.4, 20 recent at 1.0: the recent ones dominate
 
 
 def test_winter_plan_holds_only_past_the_margin():
