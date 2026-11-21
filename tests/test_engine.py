@@ -144,7 +144,8 @@ def _learned_house(engine, cloud_days: int = 0) -> None:
         engine.journal.day(dt.date(2026, 11, 3) - dt.timedelta(days=i))["house"]["sun"] = 1.8
     zone_id = next(iter(engine.zones))
     # Strong sun response: the model alone holds even on the default map's overcast day.
-    engine.journal.data["models"][zone_id] = {"a": 2.0, "b": 0.0, "d": 0.0, "c": 0.0, "days": 31}
+    # Sun is in clear days: a clear day lifts this zone by 4 C.
+    engine.journal.data["models"][zone_id] = {"a": 4.0, "b": 0.0, "d": 0.0, "c": 0.0, "days": 31}
     engine.journal.data["cloud_map"] = {"k": 0.45, "p": 2.5, "days": cloud_days, "mae": None}
 
 
@@ -511,9 +512,9 @@ async def test_an_unavailable_presence_keeps_what_was_known(engine, hass, freeze
 async def test_a_zone_margin_keeps_the_hold_for_very_sunny_days(engine, hass, freezer) -> None:
     _learned_house(engine, cloud_days=10)
     zone = next(iter(engine.zones.values()))
-    # This model puts the peak near 21.5: clear of 20.5 + 0.4, short of 20.5 + 1.5.
+    # This model puts the peak near 21.3: clear of 20.5 + 0.4, short of 20.5 + 1.5.
     engine.journal.data["models"][zone.zone_id] = {
-        "a": 1.0,
+        "a": 1.6,
         "b": 0.0,
         "d": 0.0,
         "c": 0.0,
@@ -524,3 +525,94 @@ async def test_a_zone_margin_keeps_the_hold_for_very_sunny_days(engine, hass, fr
     assert plan["hold"] is False
     assert plan["target"] + 0.4 < plan["predicted_peak"] < plan["target"] + 1.5
     assert _rec(hass).state == "schedule"
+
+
+# ------------------------------------------------------------------ sun and forecast sources
+
+
+def _observed_days(engine, sun: float) -> None:
+    """Three weeks of measured days, each with a winter morning, all at `sun`."""
+    zone_id = next(iter(engine.zones))
+    for i in range(1, 22):
+        rec = engine.journal.day(dt.date(2026, 11, 3) - dt.timedelta(days=i))
+        rec["house"].update(sun=sun, outdoor_mean=8.0, heat=2.0)
+        rec["zones"][zone_id] = {"t07": 19.5, "peak": 20.5, "season": "winter"}
+
+
+async def test_the_model_reads_any_sun_sensor_the_same_way(engine) -> None:
+    # Irradiance in kWh/m2 or panel energy in kWh: in clear days they are one number.
+    zone_id = next(iter(engine.zones))
+    _observed_days(engine, 1.2)
+    station = [o.sun for o in engine.observations(zone_id)]
+    _observed_days(engine, 7.2)
+    panels = [o.sun for o in engine.observations(zone_id)]
+    assert station and station == pytest.approx(panels)
+
+
+async def test_a_new_sun_sensor_starts_learning_over(engine, hass) -> None:
+    _observed_days(engine, 1.2)
+    engine.journal.data["models"]["x"] = {"a": 1.0}
+    entry = engine.entry
+    with patch(
+        "custom_components.sunhold.engine.Engine._backfill_if_new", return_value=None
+    ) as backfill:
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, "sun_sensor": "sensor.panels"}
+        )
+        await hass.async_block_till_done()
+    journal = entry.runtime_data.journal
+    assert journal.data["sources"]["sun"] == "sensor.panels"
+    assert journal.data["backfilled"] is False
+    assert journal.data["models"] == {}
+    assert all(rec["house"].get("sun") is None for _, rec in journal.days())
+    assert any(e["kind"] == "relearn" for e in journal.data["events"])
+    backfill.assert_called()
+
+
+async def test_each_forecast_provider_keeps_its_own_cloud_map(engine, hass) -> None:
+    _observed_days(engine, 1.2)
+    for i in range(1, 22):
+        rec = engine.journal.day(dt.date(2026, 11, 3) - dt.timedelta(days=i))
+        rec["house"]["forecast"] = {"cloud": 50.0, "outdoor": 8.0}  # before sources existed
+    engine.journal.data["cloud_map"] = {"k": 0.7, "p": 1.5, "days": 21, "mae": 0.1}
+    entry = engine.entry
+    hass.config_entries.async_update_entry(entry, data={**entry.data, "weather": "weather.other"})
+    await hass.async_block_till_done()
+    journal = entry.runtime_data.journal
+    assert journal.data["cloud_map"] == {} or journal.data["cloud_map"].get("days", 0) == 0
+    # The old provider's forecasts stay, labelled, and the new map does not learn from them.
+    old = journal.day(dt.date(2026, 11, 2))["house"]["forecast"]
+    assert old["source"] == "weather.home"
+    await entry.runtime_data.async_refit()
+    assert journal.data["cloud_map"].get("days", 0) == 0
+
+
+async def test_the_morning_forecast_is_archived_by_the_hour(engine, hass, freezer) -> None:
+    from homeassistant.core import SupportsResponse
+
+    def forecasts(call):
+        base = dt.datetime(2026, 11, 3, 0, 0, tzinfo=dt.UTC)
+        return {
+            "weather.home": {
+                "forecast": [
+                    {
+                        "datetime": (base + dt.timedelta(hours=h)).isoformat(),
+                        "temperature": 5.0 + h / 2,
+                        "cloud_coverage": 30,
+                    }
+                    for h in range(24)
+                ]
+            }
+        }
+
+    hass.services.async_register(
+        "weather", "get_forecasts", forecasts, supports_response=SupportsResponse.ONLY
+    )
+    freezer.move_to(dt.datetime(2026, 11, 3, 4, 30, tzinfo=dt.UTC))  # 05:30 local
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    fc = engine.journal.day(dt.date(2026, 11, 3))["house"]["forecast"]
+    assert fc["source"] == "weather.home"
+    assert fc["cloud"] == 30.0
+    hours = {h: (t, c) for h, t, c in fc["hourly"]}
+    assert hours[13] == (11.0, 30)  # 12:00 UTC is 13:00 in Rome

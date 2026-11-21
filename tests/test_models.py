@@ -29,11 +29,12 @@ from custom_components.sunhold.models import (
 TODAY = dt.date(2026, 11, 3)
 
 
-def _days(n, a=0.7, b=0.06, d=0.25, c=0.4, noise=0.0, seed=1):
+def _days(n, a=1.2, b=0.06, d=0.25, c=0.4, noise=0.0, seed=1):
     rng = random.Random(seed)
     out = []
     for i in range(n):
-        sun, dout, heat = rng.uniform(0.2, 1.8), rng.uniform(-9, -2), rng.uniform(0, 6)
+        # Sun in clear days.
+        sun, dout, heat = rng.uniform(0.1, 1.1), rng.uniform(-9, -2), rng.uniform(0, 6)
         rise = a * sun + b * dout + d * heat + c + rng.gauss(0, noise)
         out.append(DayObservation(TODAY - dt.timedelta(days=n - i), sun, dout, heat, rise))
     return out
@@ -41,7 +42,7 @@ def _days(n, a=0.7, b=0.06, d=0.25, c=0.4, noise=0.0, seed=1):
 
 def test_fit_recovers_known_coefficients():
     model = fit_rise(_days(60), TODAY)
-    assert model.a == pytest.approx(0.7, abs=0.05)
+    assert model.a == pytest.approx(1.2, abs=0.15)  # within the prior's pull
     assert model.d == pytest.approx(0.25, abs=0.02)
     assert model.c == pytest.approx(0.4, abs=0.15)
     assert model.days == 60
@@ -57,7 +58,7 @@ def test_the_outdoor_effect_is_never_negative():
     # house less heat is physics, not something to learn the other way round.
     model = fit_rise(_days(60, b=-0.08), TODAY)
     assert model.b == pytest.approx(MIN_OUTDOOR_COEF)
-    assert model.a == pytest.approx(0.7, abs=0.15)
+    assert model.a == pytest.approx(1.2, abs=0.2)
     assert model.mae is not None
 
 
@@ -74,10 +75,10 @@ def test_few_days_lean_on_the_prior():
 def test_recent_days_win_over_old_ones():
     old = [
         DayObservation(o.day - dt.timedelta(days=120), o.sun, o.delta_out, o.heat, o.rise)
-        for o in _days(40, a=0.4)
+        for o in _days(40, a=1.8)
     ]
-    model = fit_rise(old + _days(20, a=1.0, seed=2), TODAY)
-    assert model.a > 0.7  # 40 days at 0.4, 20 recent at 1.0: the recent ones dominate
+    model = fit_rise(old + _days(20, a=0.6, seed=2), TODAY)
+    assert model.a < 0.95  # 40 old days at 1.8, 20 recent at 0.6: the recent ones dominate
 
 
 def test_winter_plan_holds_only_past_the_margin():

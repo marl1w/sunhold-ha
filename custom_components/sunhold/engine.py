@@ -233,6 +233,7 @@ class Engine:
         self._restore_today()
         for zone in self.zones.values():
             zone.window_open = self._any_open(zone)
+        self._check_sources()
         self._spawn(self._backfill_if_new())
         if 5 <= dt_util.now().hour < 8:
             self._spawn(self._morning(dt_util.now()))
@@ -627,7 +628,7 @@ class Engine:
         except Exception as err:
             _LOGGER.warning("Forecast unavailable: %s", err)
             return None
-        cloud, outdoor = [], []
+        cloud, outdoor, hourly = [], [], []
         for item in (response or {}).get(weather, {}).get("forecast", []):
             parsed = dt_util.parse_datetime(str(item.get("datetime", "")))
             if parsed is None:
@@ -639,9 +640,16 @@ class Engine:
                 cloud.append(float(item["cloud_coverage"]))
             if when.hour in history.OUTDOOR_HOURS and item.get("temperature") is not None:
                 outdoor.append(float(item["temperature"]))
+            # Kept as given, so forecast providers can be compared with what came later.
+            hourly.append([when.hour, item.get("temperature"), item.get("cloud_coverage")])
         if not cloud or not outdoor:
             return None
-        return {"cloud": round(fmean(cloud), 1), "outdoor": round(fmean(outdoor), 2)}
+        return {
+            "cloud": round(fmean(cloud), 1),
+            "outdoor": round(fmean(outdoor), 2),
+            "source": weather,
+            "hourly": hourly,
+        }
 
     def _sun_days(self) -> list[tuple[dt.date, float | None]]:
         return [(day, rec["house"].get("sun")) for day, rec in self.journal.days()]
@@ -678,7 +686,9 @@ class Engine:
                 # Not enough measured days to know what sun means here yet.
                 rec["plan"] = {"hold": cloud_ok, "fallback": True, "cloud": forecast["cloud"]}
             else:
-                sun = cmap.expected(clear, forecast["cloud"])
+                # The model works in clear days, so any sun sensor - irradiance, panel
+                # power - means the same thing to it.
+                sun = cmap.expected(clear, forecast["cloud"]) / clear
                 plan = plan_winter(
                     indoor,
                     models[zone.zone_id],
@@ -829,6 +839,32 @@ class Engine:
             }
         return ids
 
+    def _check_sources(self) -> None:
+        """Start learning over when the sun sensor changes, and label old forecasts.
+
+        Every day's sun was measured with the old sensor, so the history is read again
+        from the new one's statistics. Forecasts from an earlier provider stay in the
+        archive with their source, and the cloud map learns from the current one only.
+        """
+        sources = self.journal.data.setdefault("sources", {})
+        sun, weather = self.cfg.get(CONF_SUN), self.cfg.get(CONF_WEATHER)
+        old_weather = sources.get("weather", weather)
+        for _, rec in self.journal.days():
+            if (fc := rec["house"].get("forecast")) and "source" not in fc:
+                fc["source"] = old_weather
+        if "sun" in sources and sources["sun"] != sun:
+            self.journal.data["backfilled"] = False
+            self.journal.data["models"] = {}
+            self.journal.data["cloud_map"] = {}
+            for _, rec in self.journal.days():
+                rec["house"]["sun"] = None
+            self.journal.event(dt_util.now(), "relearn", previous=sources["sun"], sun=sun)
+        if old_weather != weather:
+            self.journal.data["cloud_map"] = {}
+            self.journal.event(dt_util.now(), "new_forecast", previous=old_weather, weather=weather)
+        sources.update(sun=sun, weather=weather)
+        self.journal.save()
+
     async def _backfill_if_new(self) -> None:
         """Learn from the house's past on first start, so day one is not blind."""
         if self.journal.data.get("backfilled") or not self.zones:
@@ -847,9 +883,13 @@ class Engine:
     def observations(self, zone_id: str) -> list[DayObservation]:
         """Return the days a zone's winter model learns from."""
         obs = []
+        sun_days = self._sun_days()
         for day, rec in self.journal.days():
             house, zone = rec["house"], rec["zones"].get(zone_id, {})
             if None in (house.get("sun"), house.get("outdoor_mean"), house.get("heat")):
+                continue
+            clear = clear_before(day, sun_days)
+            if not clear:
                 continue
             if "t07" not in zone or "peak" not in zone:
                 continue
@@ -858,7 +898,7 @@ class Engine:
             obs.append(
                 DayObservation(
                     day,
-                    house["sun"],
+                    house["sun"] / clear,
                     house["outdoor_mean"] - zone["t07"],
                     house["heat"],
                     zone["peak"] - zone["t07"],
@@ -876,8 +916,12 @@ class Engine:
         obs = {z: self.observations(z) for z in self.zones}
         sun_days = self._sun_days()
         samples = []
+        weather = self.cfg.get(CONF_WEATHER)
         for day, rec in self.journal.days():
             fc, sun = rec["house"].get("forecast"), rec["house"].get("sun")
+            # Each provider means something different by its cloud cover.
+            if fc and fc.get("source", weather) != weather:
+                continue
             if fc and sun is not None and (clear := clear_before(day, sun_days)):
                 samples.append((clear, fc["cloud"], sun))
 

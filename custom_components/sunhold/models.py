@@ -25,13 +25,16 @@ from .const import DEFAULT_CUT_W, DEFAULT_RESUME_W, PUMP_RUNNING_W, Feedback, Se
 # decision asks it about heat = 0. The prior is a plausible floor-heated house; with few
 # days of its own the fit leans on it, with many it forgets it.
 #
+# Sun is measured in clear days (the day's sun over a clear day's, from the weeks before),
+# so the model reads any sun sensor the same way: irradiance, or solar panel power.
+#
 # b must be positive: the milder it is outside, the less heat the house loses and the
 # further it climbs. Outdoor temperature and morning heating move together (cold days are
 # heated days), so the data alone separate the two poorly, and a prior with the wrong
 # sign (b = -0.05 until 0.3.0) held b near zero: warm days earned no credit, and a 16 C
-# November day was forecast as a cold one (Villa 1, 2026-11-20). Fitted on its own 48
-# days that house gives b = +0.05 to +0.07.
-PRIOR = (0.6, 0.05, 0.2, 0.3)
+# November day was forecast as a cold one (Villa 1, 2026-11-20). Fitted on its own days
+# that house gives b = +0.05 to +0.07.
+PRIOR = (1.0, 0.05, 0.2, 0.3)
 # The floor b is held to if a fit still lands below it.
 MIN_OUTDOOR_COEF = 0.01
 PRIOR_DAYS = 5.0

@@ -33,10 +33,16 @@ all but the sunniest days, while a bedroom can hold more readily.
 
 - **How the house answers the weather.** For each zone, a daily model predicts the
   climb from 07:00 to the afternoon peak from sun, outdoor temperature and heating.
-  Recent days count more, so the model follows the seasons. The panel shows its
-  measured accuracy.
-- **How far the forecast can be trusted.** Each morning's forecast is archived and
-  compared with the sun that was measured.
+  Sun counts in clear days (the day's sun over a clear day's), so any sun sensor works:
+  irradiance from a weather station, or solar panel power. Pick whichever sees the low
+  winter sun best; a station's sensor that is shaded or dirty reads clear days far too
+  low. Change it under *Reconfigure* and Sunhold relearns its history from the new
+  sensor's statistics. Recent days count more, so the model follows the seasons. The
+  panel shows its measured accuracy.
+- **How far the forecast can be trusted.** Each morning's forecast is archived, hour by
+  hour, and compared with the sun that was measured. Each forecast provider gets its
+  own cloud map, so switching provider starts that part over and keeps the archive for
+  comparing them.
 - **What feels comfortable.** Each zone has a comfort offset on its winter and summer
   targets, moved by:
   - direct feedback (*too cold / just right / too warm*: buttons, a service, or the
